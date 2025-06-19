@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vue JWT Login</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <h2>Login</h2>
+    <form @submit.prevent="login">
+      <input v-model="username" placeholder="Username" />
+      <input v-model="password" type="password" placeholder="Password" />
+      <button type="submit">Login</button>
+    </form>
+    <p v-if="message">{{ message }}</p>
+  </div>
+
+  <script>
+    const { createApp, ref } = Vue
+
+    createApp({
+      setup() {
+        const username = ref('')
+        const password = ref('')
+        const message = ref('')
+
+        const login = async () => {
+          try {
+            const res = await axios.post('http://localhost/jwt-demo/backend/public/login', {
+              username: username.value,
+              password: password.value
+            })
+            localStorage.setItem('token', res.data.token)
+            //message.value = res.data.token
+            message.value = 'Login successfuliiiii! And your token is: '+ res.data.token
+          } catch (err) {
+            message.value = 'Login failed'
+          }
+        }
+
+        return { username, password, message, login }
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>
