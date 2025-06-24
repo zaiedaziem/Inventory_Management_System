@@ -1,10 +1,7 @@
 <?php
 use Psr\Container\ContainerInterface;
 
-$container->set('db', function () {
-    $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
-    $dotenv->load();
-
+$container->set('db', function (ContainerInterface $c) {
     $host = $_ENV['DB_HOST'];
     $db = $_ENV['DB_NAME'];
     $user = $_ENV['DB_USER'];
@@ -14,3 +11,4 @@ $container->set('db', function () {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     return $pdo;
 });
+?>
