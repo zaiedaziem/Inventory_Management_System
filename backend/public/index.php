@@ -1,20 +1,13 @@
 <?php
+use Psr\Http\Message\ResponseInterface as Response;
+use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Factory\AppFactory;
-use DI\Container;
-use Dotenv\Dotenv;
 
-require __DIR__ . '/../../vendor/autoload.php';
+require_once dirname(__DIR__) . '/vendor/autoload.php';
+require_once dirname(__DIR__) . '/src/dependencies.php';
+require_once dirname(__DIR__) . '/src/routes.php';
 
-$container = new Container();
-AppFactory::setContainer($container);
 $app = AppFactory::create();
+require_once dirname(__DIR__) . '/src/routes.php';
 
-$dotenv = Dotenv::createImmutable(__DIR__ . '/../..');
-$dotenv->load();
-
-require __DIR__ . '/../src/dependencies.php';
-require __DIR__ . '/../src/routes.php';
-
-$app->setBasePath('/jwt-demo/backend/public');
 $app->run();
-?>

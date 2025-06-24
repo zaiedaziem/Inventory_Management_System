@@ -1,142 +1,170 @@
 <?php
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use Slim\Factory\AppFactory;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$app = AppFactory::create();
-
-require __DIR__ . '/middleware.php';
-
-// Register
-$app->post('/api/auth/register', function (Request $request, Response $response) use ($app) {
-    $data = $request->getParsedBody();
-    if (!isset($data['name']) || !isset($data['email']) || !isset($data['password']) || !isset($data['department'])) {
-        $response->getBody()->write(json_encode(['error' => 'Missing required fields']));
-        return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
+$app->add(function (Request $request, Response $response, callable $next) {
+    $authHeader = $request->getHeaderLine('Authorization');
+    if (strpos($request->getUri()->getPath(), '/api/auth') !== false) {
+        return $next($request, $response);
     }
-
-    $name = filter_var($data['name'], FILTER_SANITIZE_STRING);
-    $email = filter_var($data['email'], FILTER_SANITIZE_EMAIL);
-    $password = password_hash($data['password'], PASSWORD_BCRYPT);
-    $department = filter_var($data['department'], FILTER_SANITIZE_STRING);
-    $role = in_array($data['role'], ['staff', 'manager', 'admin']) ? $data['role'] : 'staff';
-
-    $db = $app->getContainer()->get('db');
-    $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
-    $stmt->execute([$email]);
-    if ($stmt->fetch()) {
-        $response->getBody()->write(json_encode(['error' => 'Email already exists']));
-        return $response->withHeader('Content-Type', 'application/json')->withStatus(409);
+    
+    if (!$authHeader || !preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
+        $response->getBody()->write(json_encode(['error' => 'Token not provided']));
+        return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
     }
-
-    $stmt = $db->prepare("INSERT INTO users (name, email, password, role, department) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$name, $email, $password, $role, $department]);
-
-    $response->getBody()->write(json_encode(['message' => 'User registered successfully', 'user_id' => $db->lastInsertId()]));
-    return $response->withHeader('Content-Type', 'application/json')->withStatus(201);
+    
+    try {
+        $jwt = $matches[1];
+        $decoded = JWT::decode($jwt, new Key($this->get('jwt_secret'), 'HS256'));
+        $request = $request->withAttribute('user', $decoded->data);
+        return $next($request, $response);
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => 'Invalid token']));
+        return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
+    }
 });
 
-// Login
-$app->post('/api/auth/login', function (Request $request, Response $response) use ($app) {
+// POST /api/auth/register
+$app->post('/api/auth/register', function (Request $request, Response $response, array $args) {
     $data = $request->getParsedBody();
-    if (!isset($data['email']) || !isset($data['password'])) {
-        $response->getBody()->write(json_encode(['error' => 'Email and password are required']));
-        return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
+    
+    try {
+        $pdo = $this->get('db');
+        $hashedPassword = password_hash($data['password'], PASSWORD_DEFAULT);
+        
+        $stmt = $pdo->prepare("INSERT INTO users (name, email, password, role, department) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute([
+            $data['name'],
+            $data['email'],
+            $hashedPassword,
+            $data['role'] ?? 'staff',
+            $data['department'] ?? null
+        ]);
+        
+        $response->getBody()->write(json_encode(['message' => 'User registered successfully']));
+        return $response->withStatus(201)->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
+});
 
-    $email = filter_var($data['email'], FILTER_SANITIZE_EMAIL);
-    $password = $data['password'];
-
-    $db = $app->getContainer()->get('db');
-    $stmt = $db->prepare("SELECT id, email, password, role FROM users WHERE email = ?");
-    $stmt->execute([$email]);
-    $user = $stmt->fetch();
-
-    if ($user && password_verify($password, $user['password'])) {
-        $permissions = [];
-        switch ($user['role']) {
-            case 'staff':
-                $permissions = ['view_products', 'view_stock'];
-                break;
-            case 'manager':
-                $permissions = ['view_products', 'add_products', 'update_products', 'manage_stock'];
-                break;
-            case 'admin':
-                $permissions = ['all_permissions', 'delete_products', 'manage_users', 'view_reports'];
-                break;
+// POST /api/auth/login
+$app->post('/api/auth/login', function (Request $request, Response $response, array $args) {
+    $data = $request->getParsedBody();
+    
+    try {
+        $pdo = $this->get('db');
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+        $stmt->execute([$data['email']]);
+        $user = $stmt->fetch();
+        
+        if ($user && password_verify($data['password'], $user['password'])) {
+            $payload = [
+                'iat' => time(),
+                'exp' => time() + (60 * 60 * 24), // 24 hours
+                'data' => [
+                    'id' => $user['id'],
+                    'email' => $user['email'],
+                    'role' => $user['role']
+                ]
+            ];
+            
+            $jwt = JWT::encode($payload, $this->get('jwt_secret'), 'HS256');
+            
+            $response->getBody()->write(json_encode(['token' => $jwt]));
+            return $response->withHeader('Content-Type', 'application/json');
         }
-
-        $payload = [
-            'user_id' => $user['id'],
-            'email' => $user['email'],
-            'role' => $user['role'],
-            'permissions' => $permissions,
-            'iat' => time(),
-            'exp' => time() + 3600
-        ];
-        $token = JWT::encode($payload, $_ENV['JWT_SECRET'], 'HS256');
-        $response->getBody()->write(json_encode(['token' => $token]));
-        return $response->withHeader('Content-Type', 'application/json')->withStatus(200);
+        
+        $response->getBody()->write(json_encode(['error' => 'Invalid credentials']));
+        return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
-
-    $response->getBody()->write(json_encode(['error' => 'Invalid credentials']));
-    return $response->withHeader('Content-Type', 'application/json')->withStatus(401);
 });
 
-// Get Products
-$app->get('/api/products', function (Request $request, Response $response) use ($app) {
-    $db = $app->getContainer()->get('db');
-    $query = "SELECT * FROM products";
-    $params = [];
-    $category = $request->getQueryParam('category');
-    $lowStock = $request->getQueryParam('low_stock');
-
-    if ($category) {
-        $query .= " WHERE category = ?";
-        $params[] = $category;
+// GET /api/products
+$app->get('/api/products', function (Request $request, Response $response, array $args) {
+    try {
+        $pdo = $this->get('db');
+        $stmt = $pdo->query("SELECT p.*, s.name as supplier_name FROM products p LEFT JOIN suppliers s ON p.supplier_id = s.id");
+        $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        $response->getBody()->write(json_encode($products));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
-    if ($lowStock && $lowStock === 'true') {
-        $query .= $category ? " AND" : " WHERE";
-        $query .= " quantity < minimum_stock";
-    }
-
-    $stmt = $db->prepare($query);
-    $stmt->execute($params);
-    $products = $stmt->fetchAll();
-    $response->getBody()->write(json_encode(['products' => $products]));
-    return $response->withHeader('Content-Type', 'application/json')->withStatus(200);
 });
 
-// Add Product
-$app->post('/api/products', function (Request $request, Response $response) use ($app) {
+// POST /api/products
+$app->post('/api/products', function (Request $request, Response $response, array $args) {
     $data = $request->getParsedBody();
-    $db = $app->getContainer()->get('db');
-    $stmt = $db->prepare("INSERT INTO products (name, sku, category, price, quantity, minimum_stock, supplier_id, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$data['name'], $data['sku'], $data['category'], $data['price'], $data['quantity'], $data['minimum_stock'], $data['supplier_id'], $data['description']]);
-    $response->getBody()->write(json_encode(['message' => 'Product added successfully', 'product_id' => $db->lastInsertId()]));
-    return $response->withHeader('Content-Type', 'application/json')->withStatus(201);
+    
+    try {
+        $pdo = $this->get('db');
+        $stmt = $pdo->prepare("INSERT INTO products (name, sku, category, price, quantity, minimum_stock, supplier_id, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([
+            $data['name'],
+            $data['sku'],
+            $data['category'],
+            $data['price'],
+            $data['quantity'],
+            $data['minimum_stock'],
+            $data['supplier_id'],
+            $data['description']
+        ]);
+        
+        $response->getBody()->write(json_encode(['message' => 'Product added successfully']));
+        return $response->withStatus(201)->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    }
 });
 
-// Update Product
-$app->put('/api/products/{id}', function (Request $request, Response $response, $args) use ($app) {
-    $id = $args['id'];
+// PUT /api/products/{id}
+$app->put('/api/products/{id}', function (Request $request, Response $response, array $args) {
     $data = $request->getParsedBody();
-    $db = $app->getContainer()->get('db');
-    $stmt = $db->prepare("UPDATE products SET name = ?, quantity = ?, price = ?, minimum_stock = ? WHERE id = ?");
-    $stmt->execute([$data['name'], $data['quantity'], $data['price'], $data['minimum_stock'], $id]);
-    $response->getBody()->write(json_encode(['message' => 'Product updated successfully']));
-    return $response->withHeader('Content-Type', 'application/json')->withStatus(200);
+    
+    try {
+        $pdo = $this->get('db');
+        $stmt = $pdo->prepare("UPDATE products SET name = ?, sku = ?, category = ?, price = ?, quantity = ?, minimum_stock = ?, supplier_id = ?, description = ? WHERE id = ?");
+        $stmt->execute([
+            $data['name'],
+            $data['sku'],
+            $data['category'],
+            $data['price'],
+            $data['quantity'],
+            $data['minimum_stock'],
+            $data['supplier_id'],
+            $data['description'],
+            $args['id']
+        ]);
+        
+        $response->getBody()->write(json_encode(['message' => 'Product updated successfully']));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    }
 });
 
-// Delete Product
-$app->delete('/api/products/{id}', function (Request $request, Response $response, $args) use ($app) {
-    $id = $args['id'];
-    $db = $app->getContainer()->get('db');
-    $stmt = $db->prepare("DELETE FROM products WHERE id = ?");
-    $stmt->execute([$id]);
-    $response->getBody()->write(json_encode(['message' => 'Product deleted successfully']));
-    return $response->withHeader('Content-Type', 'application/json')->withStatus(200);
+// DELETE /api/products/{id}
+$app->delete('/api/products/{id}', function (Request $request, Response $response, array $args) {
+    try {
+        $pdo = $this->get('db');
+        $stmt = $pdo->prepare("DELETE FROM products WHERE id = ?");
+        $stmt->execute([$args['id']]);
+        
+        $response->getBody()->write(json_encode(['message' => 'Product deleted successfully']));
+        return $response->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode(['error' => $e->getMessage()]));
+        return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    }
 });
-?>

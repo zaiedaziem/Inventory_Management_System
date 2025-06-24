@@ -28,23 +28,26 @@ CREATE TABLE products (
     price DECIMAL(10,2) NOT NULL,
     quantity INT NOT NULL DEFAULT 0,
     minimum_stock INT DEFAULT 10,
-    supplier_id INT,
+    supplier_id INT NULL,
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
 );
 
-INSERT INTO suppliers (name, contact_email, phone) VALUES
-('Tech Supplies Co', 'contact@techsupplies.com', '+1-555-0101'),
-('Office Equipment Ltd', 'info@officeequip.com', '+1-555-0102');
+-- Insert suppliers with Malaysian info
+INSERT INTO suppliers (name, contact_email, phone, address) VALUES
+('Teknologi Peralatan Sdn Bhd', 'contact@tekperalatan.com.my', '+60-3-7890-0101', 'Jalan Perindustrian, 47301 Petaling Jaya, Selangor'),
+('Peralatan Pejabat Malaysia', 'info@pejabatperalatan.my', '+60-3-7890-0102', 'No. 5, Jalan Seri, 56100 Kuala Lumpur, Wilayah Persekutuan');
 
+-- Insert users with Malaysian names and emails
 INSERT INTO users (name, email, password, role, department) VALUES
-('John Staff', 'staff@company.com', 'staff123', 'staff', 'warehouse'),
-('Jane Manager', 'manager@company.com', 'manager123', 'manager', 'inventory'),
-('Admin User', 'admin@company.com', 'admin123', 'admin', 'management');
+('Ahmad Staff', 'ahmad.staff@company.com.my', 'staff123', 'staff', 'warehouse'),
+('Siti Manager', 'siti.manager@company.com.my', 'manager123', 'manager', 'inventory'),
+('Admin User', 'admin.user@company.com.my', 'admin123', 'admin', 'management');
 
+-- Insert products with Malaysian suppliers
 INSERT INTO products (name, sku, category, price, quantity, minimum_stock, supplier_id, description) VALUES
-('Laptop Dell XPS 13', 'DELL-XPS-001', 'electronics', 1299.99, 25, 5, 1, 'High-performance laptop'),
-('Office Chair', 'CHAIR-001', 'furniture', 199.99, 50, 10, 2, 'Ergonomic office chair'),
-('Wireless Mouse', 'MOUSE-001', 'electronics', 29.99, 8, 15, 1, 'Bluetooth wireless mouse');
+('Laptop Dell XPS 13', 'DELL-XPS-001', 'electronics', 5499.99, 25, 5, 1, 'High-performance laptop'),
+('Kerusi Pejabat Ergonomik', 'CHAIR-001', 'furniture', 799.99, 50, 10, 2, 'Ergonomic office chair'),
+('Maus Wayarles', 'MOUSE-001', 'electronics', 129.99, 8, 15, 1, 'Bluetooth wireless mouse');

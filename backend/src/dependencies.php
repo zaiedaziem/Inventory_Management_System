@@ -1,14 +1,26 @@
 <?php
-use Psr\Container\ContainerInterface;
+use DI\Container;
+use Firebase\JWT\JWT;
+use Dotenv\Dotenv;
 
-$container->set('db', function (ContainerInterface $c) {
+$container = new Container();
+
+$container->set('db', function() {
+    $dotenv = Dotenv::createImmutable(dirname(__DIR__));
+    $dotenv->load();
+    
     $host = $_ENV['DB_HOST'];
-    $db = $_ENV['DB_NAME'];
+    $dbname = $_ENV['DB_NAME'];
     $user = $_ENV['DB_USER'];
     $pass = $_ENV['DB_PASS'];
-
-    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8", $user, $pass);
+    
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     return $pdo;
 });
-?>
+
+$container->set('jwt_secret', function() {
+    return $_ENV['JWT_SECRET'];
+});
+
+return $container;
