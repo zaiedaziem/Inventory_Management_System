@@ -10,158 +10,70 @@
 <body>
     <div id="app" class="container mx-auto p-4">
         <h1 class="text-3xl font-bold mb-4">Inventory Management System</h1>
-
-        <!-- Login Form -->
-        <div v-if="!isAuthenticated" class="mb-8 bg-white p-6 rounded shadow">
-            <h2 class="text-xl font-semibold mb-4">Login</h2>
-            <div class="space-y-4">
-                <input v-model="loginData.email" type="email" placeholder="Email" class="w-full p-2 border rounded">
-                <input v-model="loginData.password" type="password" placeholder="Password" class="w-full p-2 border rounded">
-                <button @click="login" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Login</button>
-            </div>
+        <div v-if="!isAuthenticated">
+            <register-component @login="handleLogin"></register-component>
+            <login-component @login="handleLogin"></login-component>
         </div>
-
-        <!-- Product Management -->
-        <div v-if="isAuthenticated" class="bg-white p-6 rounded shadow">
-            <h2 class="text-xl font-semibold mb-4">Products</h2>
-            
-            <!-- Add Product Form -->
-            <div class="mb-4">
-                <h3 class="text-lg font-medium mb-2">Add New Product</h3>
-                <div class="grid grid-cols-2 gap-4">
-                    <input v-model="newProduct.name" placeholder="Name" class="p-2 border rounded">
-                    <input v-model="newProduct.sku" placeholder="SKU" class="p-2 border rounded">
-                    <input v-model="newProduct.category" placeholder="Category" class="p-2 border rounded">
-                    <input v-model="newProduct.price" type="number" placeholder="Price" class="p-2 border rounded">
-                    <input v-model="newProduct.quantity" type="number" placeholder="Quantity" class="p-2 border rounded">
-                    <input v-model="newProduct.minimum_stock" type="number" placeholder="Minimum Stock" class="p-2 border rounded">
-                    <input v-model="newProduct.supplier_id" type="number" placeholder="Supplier ID" class="p-2 border rounded">
-                    <input v-model="newProduct.description" placeholder="Description" class="p-2 border rounded">
-                </div>
-                <button @click="addProduct" class="mt-2 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Add Product</button>
-            </div>
-
-            <!-- Products List -->
-            <div class="space-y-2">
-                <div v-for="product in products" :key="product.id" class="p-2 border-b flex justify-between items-center">
-                    <div>
-                        <span class="font-medium">{{ product.name }}</span>
-                        <span class="ml-2 text-gray-600">SKU: {{ product.sku }}</span>
-                        <span class="ml-2 text-gray-600">Stock: {{ product.quantity }}</span>
-                        <span class="ml-2 text-gray-600">Price: ${{ product.price }}</span>
-                    </div>
-                    <div>
-                        <button @click="editProduct(product)" class="bg-yellow-500 text-white px-2 py-1 rounded mr-2 hover:bg-yellow-600">Edit</button>
-                        <button @click="deleteProduct(product.id)" class="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Delete</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Edit Product Modal -->
-        <div v-if="showEditModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
-            <div class="bg-white p-6 rounded shadow w-1/2">
-                <h3 class="text-lg font-medium mb-2">Edit Product</h3>
-                <div class="grid grid-cols-2 gap-4">
-                    <input v-model="editProductData.name" placeholder="Name" class="p-2 border rounded">
-                    <input v-model="editProductData.sku" placeholder="SKU" class="p-2 border rounded">
-                    <input v-model="editProductData.category" placeholder="Category" class="p-2 border rounded">
-                    <input v-model="editProductData.price" type="number" placeholder="Price" class="p-2 border rounded">
-                    <input v-model="editProductData.quantity" type="number" placeholder="Quantity" class="p-2 border rounded">
-                    <input v-model="editProductData.minimum_stock" type="number" placeholder="Minimum Stock" class="p-2 border rounded">
-                    <input v-model="editProductData.supplier_id" type="number" placeholder="Supplier ID" class="p-2 border rounded">
-                    <input v-model="editProductData.description" placeholder="Description" class="p-2 border rounded">
-                </div>
-                <div class="mt-4 flex justify-end">
-                    <button @click="showEditModal = false" class="bg-gray-500 text-white px-4 py-2 rounded mr-2 hover:bg-gray-600">Cancel</button>
-                    <button @click="updateProduct" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Save</button>
-                </div>
-            </div>
+        <div v-else>
+            <product-list-component @edit="editProduct" @delete="deleteProduct"></product-list-component>
+            <add-product-component @product-added="fetchProducts"></add-product-component>
+            <edit-product-component v-if="showEditModal" :product="editProductData" @update="updateProduct" @close="showEditModal = false"></edit-product-component>
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import RegisterComponent from './components/RegisterComponent.js';
+        import LoginComponent from './components/LoginComponent.js';
+        import ProductListComponent from './components/ProductListComponent.js';
+        import AddProductComponent from './components/AddProductComponent.js';
+        import EditProductComponent from './components/EditProductComponent.js';
+
         const { createApp } = Vue;
 
         createApp({
+            components: {
+                'register-component': RegisterComponent,
+                'login-component': LoginComponent,
+                'product-list-component': ProductListComponent,
+                'add-product-component': AddProductComponent,
+                'edit-product-component': EditProductComponent
+            },
             data() {
                 return {
-                    isAuthenticated: false,
-                    loginData: { email: '', password: '' },
-                    products: [],
-                    newProduct: {
-                        name: '', sku: '', category: '', price: 0, quantity: 0,
-                        minimum_stock: 10, supplier_id: null, description: ''
-                    },
+                    isAuthenticated: !!localStorage.getItem('token'),
                     editProductData: {},
                     showEditModal: false
                 };
             },
             methods: {
-                async login() {
-                    try {
-                        const response = await fetch('/api/auth/login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(this.loginData)
-                        });
-                        const data = await response.json();
-                        if (data.token) {
-                            localStorage.setItem('token', data.token);
-                            this.isAuthenticated = true;
-                            this.fetchProducts();
-                            alert('Login successful!');
-                        } else {
-                            alert(data.error);
-                        }
-                    } catch (error) {
-                        alert('Error: ' + error.message);
-                    }
+                handleLogin() {
+                    this.isAuthenticated = true;
+                    this.fetchProducts();
                 },
                 async fetchProducts() {
                     try {
                         const response = await fetch('/api/products', {
                             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
                         });
-                        this.products = await response.json();
+                        const products = await response.json();
+                        this.$refs.productListComponent.setProducts(products);
                     } catch (error) {
                         console.error('Error fetching products:', error);
-                    }
-                },
-                async addProduct() {
-                    try {
-                        const response = await fetch('/api/products', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${localStorage.getItem('token')}`
-                            },
-                            body: JSON.stringify(this.newProduct)
-                        });
-                        const data = await response.json();
-                        alert(data.message || data.error);
-                        this.newProduct = {
-                            name: '', sku: '', category: '', price: 0, quantity: 0,
-                            minimum_stock: 10, supplier_id: null, description: ''
-                        };
-                        this.fetchProducts();
-                    } catch (error) {
-                        alert('Error: ' + error.message);
                     }
                 },
                 editProduct(product) {
                     this.editProductData = { ...product };
                     this.showEditModal = true;
                 },
-                async updateProduct() {
+                async updateProduct(updatedProduct) {
                     try {
-                        const response = await fetch(`/api/products/${this.editProductData.id}`, {
+                        const response = await fetch(`/api/products/${updatedProduct.id}`, {
                             method: 'PUT',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${localStorage.getItem('token')}`
                             },
-                            body: JSON.stringify(this.editProductData)
+                            body: JSON.stringify(updatedProduct)
                         });
                         const data = await response.json();
                         alert(data.message || data.error);
@@ -188,8 +100,7 @@
                 }
             },
             mounted() {
-                if (localStorage.getItem('token')) {
-                    this.isAuthenticated = true;
+                if (this.isAuthenticated) {
                     this.fetchProducts();
                 }
             }
