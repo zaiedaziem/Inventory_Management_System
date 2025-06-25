@@ -1,14 +1,29 @@
 {
+    "name": "vendor/inventory-management-backend",
+    "description": "A backend application for managing inventory, orders, products, suppliers, and users.",
+    "type": "project",
     "require": {
-        "php-di/php-di": "^7.0",
+        "php": "^7.4 || ^8.0",
         "slim/slim": "^4.0",
-        "slim/psr7": "^1.6",
-        "firebase/php-jwt": "^6.0",
-        "vlucas/phpdotenv": "^5.5"
+        "slim/psr7": "^1.0",
+        "monolog/monolog": "^2.0",
+        "doctrine/orm": "^2.9",
+        "doctrine/dbal": "^3.0"
     },
     "autoload": {
         "psr-4": {
-            "App\\": "src/"
+            "App\\": "src/App/"
         }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0"
+    },
+    "scripts": {
+        "test": "phpunit"
     }
 }
